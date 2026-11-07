@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JC ADS Checkout · AI campaign planner + PayPal</title>
+<style>
+:root{--bg:#0b1020;--card:#141a33;--txt:#eef1ff;--mut:#9aa3c7;--acc:#ffc439;--ok:#2ecc71;--line:#26305a}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+header{padding:28px 20px 8px;max-width:860px;margin:auto}h1{margin:0;font-size:28px}h1 b{color:var(--acc)}
+header p{color:var(--mut);margin:6px 0 0}
+main{max-width:860px;margin:auto;padding:12px 20px 60px;display:grid;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+.step{font-size:12px;letter-spacing:.08em;color:var(--acc);text-transform:uppercase;margin-bottom:6px}
+h2{margin:0 0 12px;font-size:20px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,textarea,select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:#0f1530;color:var(--txt);font-size:15px}
+textarea{min-height:70px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{margin-top:14px;padding:12px 18px;border:0;border-radius:10px;background:var(--acc);color:#111;font-weight:700;font-size:15px;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+.ads{display:grid;gap:10px;margin-top:12px}
+.ad{border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer}
+.ad.sel{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc) inset}
+.ad b{display:block}.ad span{color:var(--mut);font-size:14px}
+.total{font-size:30px;font-weight:800}.mut{color:var(--mut);font-size:13px}
+.ok{color:var(--ok);font-weight:700}.err{color:#ff7675}
+.pill{display:inline-block;font-size:12px;padding:3px 8px;border-radius:99px;background:#22305f;color:var(--mut)}
+#ppButtons{margin-top:14px;max-width:420px}
+footer{text-align:center;color:var(--mut);font-size:12px;padding:20px}
+@media(max-width:600px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>JC <b>ADS</b> Checkout</h1>
+  <p>Tell the AI about your business, get a campaign plan and ad copy, pay with PayPal, and your campaign goes live only after the exact payment is confirmed.</p>
+  <span class="pill">PayPal Sandbox demo · no real money</span>
+</header>
+<main>
+  <section class="card">
+    <div class="step">Step 1 · AI campaign planner</div>
+    <h2>Describe your business</h2>
+    <label>Business</label>
+    <textarea id="biz" placeholder="e.g. Family bakery in Asunción, artisan bread and cakes, delivery available"></textarea>
+    <div class="row">
+      <div><label>Goal</label><input id="goal" value="more customers"></div>
+      <div><label>Budget (USD)</label><input id="budget" type="number" min="3.43" step="0.01" value="35"></div>
+    </div>
+    <label>Ad language</label>
+    <select id="lang"><option>English</option><option>Spanish</option><option>Portuguese</option><option>German</option></select>
+    <button id="planBtn">Plan my campaign with AI</button>
+    <div id="planOut"></div>
+  </section>
+
+  <section class="card" id="payCard" hidden>
+    <div class="step">Step 2 · Review &amp; pay</div>
+    <h2>Your campaign</h2>
+    <div class="row">
+      <div><label>Impressions</label><input id="imp" type="number" min="1000" step="1000"></div>
+      <div><label>Destination URL</label><input id="url" value="https://jcads.net"></div>
+    </div>
+    <label>Headline</label><input id="hl" maxlength="60">
+    <label>Ad text</label><textarea id="tx" maxlength="140"></textarea>
+    <p class="mut">US$3.43 per 1,000 impressions · 10% off from 50,000</p>
+    <div class="total" id="total">US$0.00</div>
+    <div id="ppButtons"></div>
+    <div id="payMsg"></div>
+  </section>
+
+  <section class="card" id="doneCard" hidden>
+    <div class="step">Step 3 · Live</div>
+    <h2 class="ok">Payment confirmed · campaign active</h2>
+    <div id="doneOut"></div>
+  </section>
+</main>
+<footer>JC ADS · international digital ad network · <a style="color:var(--mut)" href="https://jcads.net">jcads.net</a></footer>
+
+<script>
+const $=id=>document.getElementById(id);
+let cfg={};
+async function api(path,opt={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opt});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.statusText);return j}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function refreshTotal(){const n=parseInt($('imp').value||0);if(n<1000){$('total').textContent='Min. 1,000';return}
+  try{const q=await api('/api/quote?impressions='+n);$('total').textContent='US$'+q.amount_usd}catch(e){$('total').textContent=e.message}}
+$('imp').addEventListener('input',refreshTotal);
+
+$('planBtn').onclick=async()=>{
+  const b=$('planBtn');b.disabled=true;b.textContent='Thinking...';$('planOut').innerHTML='';
+  try{
+    const p=await api('/api/ai/plan',{method:'POST',body:JSON.stringify({business:$('biz').value||'Small business',goal:$('goal').value,budget_usd:parseFloat($('budget').value),language:$('lang').value})});
+    let h=`<p><b>${p.impressions.toLocaleString('en-US')} impressions</b> <span class="pill">${p.source==='gemini'?'Gemini AI':'basic plan'}</span><br><span class="mut">${esc(p.reason||'')}</span></p><div class="ads">`;
+    p.ads.forEach((a,i)=>{h+=`<div class="ad${i===0?' sel':''}" data-i="${i}"><b>${esc(a.headline)}</b><span>${esc(a.text)}</span></div>`});
+    $('planOut').innerHTML=h+'</div><p class="mut">Tap an ad to use it. You can edit everything in step 2.</p>';
+    const pick=i=>{document.querySelectorAll('.ad').forEach(e=>e.classList.toggle('sel',e.dataset.i==i));$('hl').value=p.ads[i].headline;$('tx').value=p.ads[i].text};
+    document.querySelectorAll('.ad').forEach(e=>e.onclick=()=>pick(e.dataset.i));
+    $('imp').value=p.impressions;pick(0);$('payCard').hidden=false;refreshTotal();renderPayPal();
+    $('payCard').scrollIntoView({behavior:'smooth'});
+  }catch(e){$('planOut').innerHTML=`<p class="err">${esc(e.message)}</p>`}
+  b.disabled=false;b.textContent='Plan my campaign with AI';
+};
+
+let rendered=false;
+function renderPayPal(){
+  if(rendered||!cfg.paypal_client_id){if(!cfg.paypal_client_id)$('payMsg').innerHTML='<p class="err">PayPal is not configured.</p>';return}
+  if(typeof paypal==='undefined'){setTimeout(renderPayPal,400);return}
+  rendered=true;
+  paypal.Buttons({
+    style:{layout:'vertical',color:'gold',shape:'rect',label:'pay'},
+    createOrder:async()=>{$('payMsg').innerHTML='';const o=await api('/api/orders',{method:'POST',body:JSON.stringify({impressions:parseInt($('imp').value),headline:$('hl').value,text:$('tx').value,url:$('url').value})});return o.id},
+    onApprove:async(d)=>{try{const r=await api(`/api/orders/${d.orderID}/capture`,{method:'POST'});const c=r.campaign;
+      $('doneOut').innerHTML=`<p><b>${esc(c.ad.headline)}</b><br>${esc(c.ad.text)}</p><p>Paid: <b>US$${c.paid_usd}</b> · Impressions bought: <b>${c.impressions_paid.toLocaleString('en-US')}</b> · Served: ${c.impressions_served}</p><p class="mut">PayPal capture ${esc(c.capture_id)} · order ${esc(c.order_id)}. JC ADS never serves more impressions than were paid for.</p>`;
+      $('doneCard').hidden=false;$('doneCard').scrollIntoView({behavior:'smooth'})}catch(e){$('payMsg').innerHTML=`<p class="err">${esc(e.message)}</p>`}},
+    onError:e=>{$('payMsg').innerHTML=`<p class="err">PayPal error: ${esc(e.message||e)}</p>`}
+  }).render("#ppButtons");
+}
+
+(async()=>{cfg=await api('/api/config');if(cfg.paypal_client_id){const s=document.createElement('script');
+  s.src=`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.paypal_client_id)}&currency=USD&intent=capture`;document.head.appendChild(s)}})();
+</script>
+</body>
+</html>
